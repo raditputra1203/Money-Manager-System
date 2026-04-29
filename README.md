@@ -13,7 +13,6 @@ A web-based personal finance management system that allows users to record, trac
 ## 🧑‍💻 Technology
 - Frontend: HTML, CSS, JavaScript
 - Backend: Node.js (Express)
-- Database: MySQL / PostgreSQL
 
 ## 📄 Documentation
 https://docs.google.com/document/d/1FOFZNmx2XR0nRqEZ9JOXXyu_ntEc5R7dSeRjadLHAMw/edit?usp=sharing
