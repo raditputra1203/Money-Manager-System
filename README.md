@@ -14,8 +14,3 @@ A web-based personal finance management system that allows users to record, trac
 - Frontend: HTML, CSS, JavaScript
 - Backend: Node.js (Express)
 
-## 📄 Documentation
-https://docs.google.com/document/d/1FOFZNmx2XR0nRqEZ9JOXXyu_ntEc5R7dSeRjadLHAMw/edit?usp=sharing
-
-## 🎯 Purpose
-This project is developed as part of a Software Engineering course assignment.
