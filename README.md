@@ -11,6 +11,6 @@ A web-based personal finance management system that allows users to record, trac
 - Financial Analytics (Charts)
 
 ## 🧑‍💻 Technology
-- Frontend: HTML, CSS, JavaScript
+- Frontend: HTML, CSS, JavaScript, Next.js, React.js
 - Backend: Node.js (Express)
 
