@@ -142,6 +142,13 @@ export async function addBook(userId, name, clientId) {
     .select()
     .single()
   if (error) throw error
+
+  // Set this book as default for the user
+  await supabaseAdmin
+    .from('profiles')
+    .update({ default_book_id: data.id })
+    .eq('id', userId)
+
   return mapBook(data)
 }
 

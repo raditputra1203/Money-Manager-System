@@ -146,19 +146,18 @@ function reducer(state, action) {
     case 'ADD_BOOK': {
       const id = action.id || uid()
       const n = state.books.length
+      const newBook = {
+        id,
+        name: action.name.trim(),
+        balance: 0,
+        subtitle: '',
+        variant: n % 2 === 0 ? 'purple' : 'blue',
+        locked: false,
+      }
       return {
         ...state,
-        books: [
-          ...state.books,
-          {
-            id,
-            name: action.name.trim(),
-            balance: 0,
-            subtitle: '',
-            variant: n % 2 === 0 ? 'purple' : 'blue',
-            locked: false,
-          },
-        ],
+        defaultBookId: id, // Set new book as default
+        books: [...state.books, newBook],
       }
     }
 
