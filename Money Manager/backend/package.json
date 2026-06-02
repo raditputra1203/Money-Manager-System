@@ -1,0 +1,24 @@
+{
+  "name": "aol-money-manager-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "REST API backend for AOL Money Manager (Express + Supabase)",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "lint": "node --check src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0"
+  }
+}
