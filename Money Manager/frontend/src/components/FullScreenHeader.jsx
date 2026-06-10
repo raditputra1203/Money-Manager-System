@@ -21,7 +21,7 @@ export default function FullScreenHeader({
             <IconBack />
           </button>
         ) : onClose ? (
-          <button type="button" className="fs-header__btn" aria-label="Tutup" onClick={onClose}>
+          <button type="button" className="fs-header__btn" aria-label="Close" onClick={onClose}>
             <IconClose />
           </button>
         ) : (
@@ -35,7 +35,7 @@ export default function FullScreenHeader({
 
       <div className="fs-header__slot fs-header__slot--right">
         {rightAction ?? (showCloseRight ? (
-          <button type="button" className="fs-header__btn" aria-label="Tutup" onClick={onClose}>
+          <button type="button" className="fs-header__btn" aria-label="Close" onClick={onClose}>
             <IconClose />
           </button>
         ) : (

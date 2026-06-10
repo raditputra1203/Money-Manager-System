@@ -16,8 +16,8 @@ router.post(
     const password = String(req.body.password || '')
     const name = String(req.body.name || req.body.username || '').trim()
 
-    if (!email || !password) throw httpError(400, 'Email dan password wajib')
-    if (password.length < 6) throw httpError(400, 'Password minimal 6 karakter')
+    if (!email || !password) throw httpError(400, 'Email and password are required')
+    if (password.length < 6) throw httpError(400, 'Password must be at least 6 characters')
 
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -51,16 +51,26 @@ router.post(
       .toLowerCase()
       .trim()
     const password = String(req.body.password || '')
-    if (!email || !password) throw httpError(400, 'Email dan password wajib')
+    if (!email || !password) throw httpError(400, 'Email and password are required')
 
     const { data, error } = await supabaseAdmin.auth.signInWithPassword({ email, password })
-    if (error) throw httpError(401, 'Email atau password salah')
+    if (error) throw httpError(401, 'Invalid email or password')
 
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('display_name')
       .eq('id', data.user.id)
       .maybeSingle()
+
+    // Auto-create profile on login if it doesn't exist (e.g. user registered in demo mode)
+    if (!profile) {
+      const displayName = data.user.user_metadata?.display_name || email
+      await supabaseAdmin.from('profiles').upsert({
+        id: data.user.id,
+        display_name: displayName,
+        settings: { notifications: true, compactNumbers: false },
+      })
+    }
 
     res.json({
       user: {
@@ -84,7 +94,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('display_name, premium')
+      .select('display_name')
       .eq('id', req.user.id)
       .maybeSingle()
 
@@ -93,7 +103,6 @@ router.get(
         id: req.user.id,
         email: req.user.email,
         name: profile?.display_name || req.user.user_metadata?.display_name || req.user.email,
-        premium: !!profile?.premium,
       },
     })
   }),
@@ -105,7 +114,7 @@ router.patch(
   requireAuth,
   asyncHandler(async (req, res) => {
     const name = String(req.body.name || '').trim()
-    if (!name) throw httpError(400, 'Nama wajib diisi')
+    if (!name) throw httpError(400, 'Name is required')
 
     const { error } = await supabaseAdmin
       .from('profiles')
@@ -114,6 +123,24 @@ router.patch(
     if (error) throw error
 
     res.json({ ok: true })
+  }),
+)
+
+/** POST /api/auth/refresh — refresh access token */
+router.post(
+  '/refresh',
+  asyncHandler(async (req, res) => {
+    const refreshToken = String(req.body.refresh_token || '')
+    if (!refreshToken) throw httpError(400, 'refresh_token is required')
+
+    const { data, error } = await supabaseAdmin.auth.refreshSession({ refresh_token: refreshToken })
+    if (error) throw httpError(401, error.message)
+
+    res.json({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_at: data.session.expires_at,
+    })
   }),
 )
 

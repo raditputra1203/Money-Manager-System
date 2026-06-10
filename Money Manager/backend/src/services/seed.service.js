@@ -6,7 +6,6 @@ export async function seedNewUser(userId, displayName) {
   const { error: profileErr } = await supabaseAdmin.from('profiles').upsert({
     id: userId,
     display_name: displayName || '',
-    premium: false,
     settings: { notifications: true, compactNumbers: false },
   })
   if (profileErr) throw profileErr

@@ -40,6 +40,7 @@ create table if not exists public.accounts (
   account_source text not null default 'debit',
   goal_amount numeric,
   is_used boolean not null default true,
+  subtitle text not null default '',
   is_default boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -79,19 +80,6 @@ create table if not exists public.account_movements (
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.budget_plans (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.profiles (id) on delete cascade,
-  category_id text not null,
-  name text not null,
-  icon text not null default '📊',
-  amount numeric not null default 0,
-  period text not null default 'monthly',
-  start_date date not null default current_date,
-  note text default '',
-  created_at timestamptz not null default now()
-);
-
 create table if not exists public.feedbacks (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -113,9 +101,7 @@ alter table public.accounts enable row level security;
 alter table public.categories enable row level security;
 alter table public.transactions enable row level security;
 alter table public.account_movements enable row level security;
-alter table public.budget_plans enable row level security;
 alter table public.feedbacks enable row level security;
-alter table public.ratings enable row level security;
 
 create policy "profiles_own" on public.profiles for all using (auth.uid() = id);
 create policy "books_own" on public.books for all using (auth.uid() = user_id);
@@ -123,6 +109,4 @@ create policy "accounts_own" on public.accounts for all using (auth.uid() = user
 create policy "categories_own" on public.categories for all using (auth.uid() = user_id);
 create policy "transactions_own" on public.transactions for all using (auth.uid() = user_id);
 create policy "movements_own" on public.account_movements for all using (auth.uid() = user_id);
-create policy "budget_plans_own" on public.budget_plans for all using (auth.uid() = user_id);
 create policy "feedbacks_own" on public.feedbacks for all using (auth.uid() = user_id);
-create policy "ratings_own" on public.ratings for all using (auth.uid() = user_id);

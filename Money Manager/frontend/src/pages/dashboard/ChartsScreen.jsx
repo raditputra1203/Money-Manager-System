@@ -90,7 +90,7 @@ export default function ChartsScreen() {
           This Month
         </button>
         <button type="button" aria-pressed={period === 'year'} onClick={() => setPeriod('year')}>
-          This Years
+          This Year
         </button>
       </div>
 

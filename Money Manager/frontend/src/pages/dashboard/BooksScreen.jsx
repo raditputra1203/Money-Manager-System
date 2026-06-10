@@ -15,7 +15,9 @@ export default function BooksScreen({ onToast }) {
   const { state, dispatch } = useFinance()
   const catMap = useCategoryMap()
   const [modal, setModal] = useState(null)
+  const [editingId, setEditingId] = useState(null)
   const [bookName, setBookName] = useState('')
+  const [editBook, setEditBook] = useState({ id: '', name: '', subtitle: '' })
   const [txForm, setTxForm] = useState({
     type: 'expense',
     amount: '',
@@ -51,37 +53,55 @@ export default function BooksScreen({ onToast }) {
 
   const submitBook = () => {
     if (!bookName.trim()) {
-      onToast('Nama buku wajib diisi')
+      onToast('Book name is required')
       return
     }
     dispatch({ type: 'ADD_BOOK', name: bookName })
     setBookName('')
     setModal(null)
-    onToast('Buku ditambahkan')
+    onToast('Book added')
+  }
+
+  const openEditTx = (tx) => {
+    setTxForm({
+      type: tx.type,
+      amount: String(tx.amount),
+      bookId: tx.bookId,
+      accountId: tx.accountId,
+      categoryId: tx.categoryId,
+      note: tx.note || '',
+    })
+    setEditingId(tx.id)
+    setModal('tx')
   }
 
   const submitTx = () => {
     const amt = Number(txForm.amount)
     if (!amt || amt <= 0) {
-      onToast('Nominal tidak valid')
+      onToast('Invalid amount')
       return
     }
     const acc = state.accounts.find((a) => a.id === txForm.accountId)
     if (txForm.type === 'expense' && acc && acc.balance < amt) {
-      onToast('Saldo akun tidak cukup')
+      onToast('Insufficient balance')
       return
     }
-    dispatch({
-      type: 'ADD_TRANSACTION',
+    const txPayload = {
       bookId: txForm.bookId,
       accountId: txForm.accountId,
       entryType: txForm.type,
       amount: amt,
       categoryId: txForm.categoryId,
       note: txForm.note,
-    })
+    }
+    if (editingId) {
+      dispatch({ type: 'UPDATE_TRANSACTION', id: editingId, ...txPayload })
+    } else {
+      dispatch({ type: 'ADD_TRANSACTION', ...txPayload })
+    }
+    setEditingId(null)
     setModal(null)
-    onToast('Transaksi tersimpan')
+    onToast(editingId ? 'Transaction updated' : 'Transaction saved')
   }
 
   return (
@@ -131,25 +151,36 @@ export default function BooksScreen({ onToast }) {
             const isActive = b.id === state.defaultBookId
             const variant = b.variant === 'blue' ? 'blue' : 'purple'
             return (
-              <button
-                key={b.id}
-                type="button"
-                className={`book-tile ${isActive ? 'book-tile--active' : ''}`}
-                title={b.locked ? 'Buku default tidak dapat dihapus.' : 'Ketuk untuk jadikan buku aktif'}
-                onClick={() => dispatch({ type: 'SET_DEFAULT_BOOK', bookId: b.id })}
-              >
-                <div className={`book-tile__icon book-tile__icon--${variant}`}>
-                  <BookWalletIcon />
-                </div>
-                <div className="book-tile__mid">
-                  <strong className="book-tile__name">{b.name}</strong>
-                  <span className="book-tile__sub">{b.subtitle || '\u00a0'}</span>
-                </div>
-                <div className="book-tile__right">
-                  <strong className="book-tile__amt">{fmtRpBooksDisplay(b.balance)}</strong>
-                  <span className="book-tile__spark" aria-hidden />
-                </div>
-              </button>
+              <div key={b.id} className="book-tile-wrapper">
+                <button
+                  type="button"
+                  className={`book-tile ${isActive ? 'book-tile--active' : ''}`}
+                  title={b.locked ? 'Default book cannot be deleted.' : 'Tap to set as active book'}
+                  onClick={() => dispatch({ type: 'SET_DEFAULT_BOOK', bookId: b.id })}
+                >
+                  <div className={`book-tile__icon book-tile__icon--${variant}`}>
+                    <BookWalletIcon />
+                  </div>
+                  <div className="book-tile__mid">
+                    <strong className="book-tile__name">{b.name}</strong>
+                    <span className="book-tile__sub">{b.subtitle || '\u00a0'}</span>
+                  </div>
+                  <div className="book-tile__right">
+                    <strong className="book-tile__amt">{fmtRpBooksDisplay(b.balance)}</strong>
+                    <span className="book-tile__spark" aria-hidden />
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="book-tile-edit"
+                  aria-label="Edit book"
+                  onClick={() => { setEditBook({ id: b.id, name: b.name, subtitle: b.subtitle || '' }); setModal('edit-book') }}
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+                    <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                  </svg>
+                </button>
+              </div>
             )
           })}
           <button type="button" className="book-tile book-tile--add" onClick={() => setModal('book')}>
@@ -168,7 +199,7 @@ export default function BooksScreen({ onToast }) {
         </div>
         <div className="books-tx-card">
           {sorted.length === 0 ? (
-            <div className="books-tx-row books-tx-row--empty">Belum ada transaksi</div>
+            <div className="books-tx-row books-tx-row--empty">No transactions yet</div>
           ) : (
             sorted.slice(0, 3).map((t, idx, arr) => {
               const cat = catMap[t.categoryId]
@@ -186,16 +217,28 @@ export default function BooksScreen({ onToast }) {
                       {fmtTxAmountBooks(t.amount, t.type)}
                     </span>
                     <span className="books-tx-when">{relativeDayLabelEn(t.createdAt)}</span>
-                    <button
-                      type="button"
-                      className="books-tx-del"
-                      aria-label="Hapus transaksi"
-                      onClick={() => dispatch({ type: 'DELETE_TRANSACTION', id: t.id })}
-                    >
-                      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                        <path fill="currentColor" d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-                      </svg>
-                    </button>
+                    <div className="books-tx-actions">
+                      <button
+                        type="button"
+                        className="books-tx-edit"
+                        aria-label="Edit transaction"
+                        onClick={() => openEditTx(t)}
+                      >
+                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden>
+                          <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="books-tx-del"
+                        aria-label="Delete transaction"
+                        onClick={() => dispatch({ type: 'DELETE_TRANSACTION', id: t.id })}
+                      >
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                          <path fill="currentColor" d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
@@ -204,13 +247,13 @@ export default function BooksScreen({ onToast }) {
         </div>
       </section>
 
-      <button type="button" className="books-fab" aria-label="Tambah transaksi" onClick={openAddTx}>
+      <button type="button" className="books-fab" aria-label="Add transaction" onClick={openAddTx}>
         +
       </button>
 
       {modal === 'books-all' && (
-        <Sheet title="Semua buku" onClose={() => setModal(null)} center>
-          <p className="sheet-hint">Ketuk buku untuk menjadikannya buku aktif.</p>
+        <Sheet title="All Books" onClose={() => setModal(null)} center>
+          <p className="sheet-hint">Tap a book to set it as active.</p>
           <ul className="books-sheet-list">
             {state.books.map((b) => {
               const isActive = b.id === state.defaultBookId
@@ -222,7 +265,7 @@ export default function BooksScreen({ onToast }) {
                     className={`books-sheet-list__item ${isActive ? 'books-sheet-list__item--active' : ''}`}
                     onClick={() => {
                       dispatch({ type: 'SET_DEFAULT_BOOK', bookId: b.id })
-                      onToast(`${b.name} dipilih sebagai buku aktif`)
+                      onToast(`${b.name} set as active book`)
                     }}
                   >
                     <span className={`books-sheet-list__icon books-sheet-list__icon--${variant}`}>
@@ -233,22 +276,22 @@ export default function BooksScreen({ onToast }) {
                       <span>{b.subtitle || '—'}</span>
                     </span>
                     <span className="books-sheet-list__amt">{fmtRpBooksDisplay(b.balance)}</span>
-                    {isActive ? <span className="books-sheet-list__badge">Aktif</span> : null}
+                    {isActive ? <span className="books-sheet-list__badge">Active</span> : null}
                   </button>
                 </li>
               )
             })}
           </ul>
           <button type="button" className="btn-inline" onClick={() => setModal('book')}>
-            + Tambah buku baru
+            + Add new book
           </button>
         </Sheet>
       )}
 
       {modal === 'tx-all' && (
-        <Sheet title="Semua transaksi" onClose={() => setModal(null)} center>
+        <Sheet title="All Transactions" onClose={() => setModal(null)} center>
           {sorted.length === 0 ? (
-            <p className="sheet-hint sheet-hint--center">Belum ada transaksi</p>
+            <p className="sheet-hint sheet-hint--center">No transactions yet</p>
           ) : (
             <div className="books-tx-card books-tx-card--in-sheet">
               {sorted.map((t, idx, arr) => {
@@ -271,16 +314,28 @@ export default function BooksScreen({ onToast }) {
                         {fmtTxAmountBooks(t.amount, t.type)}
                       </span>
                       <span className="books-tx-when">{relativeDayLabelEn(t.createdAt)}</span>
-                      <button
-                        type="button"
-                        className="books-tx-del"
-                        aria-label="Hapus transaksi"
-                        onClick={() => dispatch({ type: 'DELETE_TRANSACTION', id: t.id })}
-                      >
-                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                          <path fill="currentColor" d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-                        </svg>
-                      </button>
+                      <div className="books-tx-actions">
+                        <button
+                          type="button"
+                          className="books-tx-edit"
+                          aria-label="Edit transaction"
+                          onClick={() => openEditTx(t)}
+                        >
+                          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden>
+                            <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="books-tx-del"
+                          aria-label="Delete transaction"
+                          onClick={() => dispatch({ type: 'DELETE_TRANSACTION', id: t.id })}
+                        >
+                          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                            <path fill="currentColor" d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
@@ -290,27 +345,52 @@ export default function BooksScreen({ onToast }) {
         </Sheet>
       )}
 
-      {modal === 'book' && (
-        <Sheet title="Buku baru" onClose={() => setModal(null)} center>
+      {modal === 'edit-book' && (
+        <Sheet title="Edit Book" onClose={() => setModal(null)} center>
           <div className="form-field">
-            <label htmlFor="bn">Nama buku</label>
-            <input id="bn" value={bookName} onChange={(e) => setBookName(e.target.value)} placeholder="Mis. Tabungan" />
+            <label>Book name</label>
+            <input value={editBook.name} onChange={(e) => setEditBook((b) => ({ ...b, name: e.target.value }))} />
+          </div>
+          <div className="form-field">
+            <label>Description</label>
+            <input value={editBook.subtitle} onChange={(e) => setEditBook((b) => ({ ...b, subtitle: e.target.value }))} placeholder="e.g. Main savings" />
           </div>
           <div className="sheet-actions">
             <button type="button" className="btn-cancel" onClick={() => setModal(null)}>
-              Batal
+              Cancel
+            </button>
+            <button type="button" className="btn-confirm" onClick={() => {
+              dispatch({ type: 'UPDATE_BOOK', id: editBook.id, name: editBook.name, subtitle: editBook.subtitle })
+              setModal(null)
+              onToast('Book updated')
+            }}>
+              Save
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {modal === 'book' && (
+        <Sheet title="New Book" onClose={() => setModal(null)} center>
+          <div className="form-field">
+            <label htmlFor="bn">Book name</label>
+            <input id="bn" value={bookName} onChange={(e) => setBookName(e.target.value)} placeholder="e.g. Savings" />
+          </div>
+          <div className="sheet-actions">
+            <button type="button" className="btn-cancel" onClick={() => setModal(null)}>
+              Cancel
             </button>
             <button type="button" className="btn-confirm" onClick={submitBook}>
-              Simpan
+              Save
             </button>
           </div>
         </Sheet>
       )}
 
       {modal === 'tx' && (
-        <Sheet title="Transaksi baru" onClose={() => setModal(null)} center>
+        <Sheet title={editingId ? 'Edit Transaction' : 'New Transaction'} onClose={() => { setEditingId(null); setModal(null) }} center>
           <div className="form-field">
-            <label>Jenis</label>
+            <label>Type</label>
             <select
               value={txForm.type}
               onChange={(e) => {
@@ -320,12 +400,12 @@ export default function BooksScreen({ onToast }) {
                 setTxForm((f) => ({ ...f, type, categoryId: nextId }))
               }}
             >
-              <option value="expense">Pengeluaran</option>
-              <option value="income">Pemasukan</option>
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
             </select>
           </div>
           <div className="form-field">
-            <label htmlFor="amt">Nominal (Rp)</label>
+            <label htmlFor="amt">Amount (Rp)</label>
             <input
               id="amt"
               inputMode="numeric"
@@ -334,7 +414,7 @@ export default function BooksScreen({ onToast }) {
             />
           </div>
           <div className="form-field">
-            <label>Buku</label>
+            <label>Book</label>
             <select value={txForm.bookId} onChange={(e) => setTxForm((f) => ({ ...f, bookId: e.target.value }))}>
               {state.books.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -344,7 +424,7 @@ export default function BooksScreen({ onToast }) {
             </select>
           </div>
           <div className="form-field">
-            <label>Akun</label>
+            <label>Account</label>
             <select value={txForm.accountId} onChange={(e) => setTxForm((f) => ({ ...f, accountId: e.target.value }))}>
               {state.accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -354,7 +434,7 @@ export default function BooksScreen({ onToast }) {
             </select>
           </div>
           <div className="form-field">
-            <label>Kategori</label>
+            <label>Category</label>
             <select value={txForm.categoryId} onChange={(e) => setTxForm((f) => ({ ...f, categoryId: e.target.value }))}>
               {state.categories
                 .filter((c) => categoryMatchesType(c, txForm.type))
@@ -366,15 +446,15 @@ export default function BooksScreen({ onToast }) {
             </select>
           </div>
           <div className="form-field">
-            <label htmlFor="tn">Catatan</label>
+            <label htmlFor="tn">Note</label>
             <input id="tn" value={txForm.note} onChange={(e) => setTxForm((f) => ({ ...f, note: e.target.value }))} />
           </div>
           <div className="sheet-actions">
             <button type="button" className="btn-cancel" onClick={() => setModal(null)}>
-              Batal
+              Cancel
             </button>
             <button type="button" className="btn-confirm" onClick={submitTx}>
-              Simpan
+              Save
             </button>
           </div>
         </Sheet>

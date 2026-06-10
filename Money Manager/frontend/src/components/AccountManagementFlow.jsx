@@ -5,7 +5,7 @@ import { MoreAcctGlyph } from './icons/WalletIcons.jsx'
 
 /**
  * @param {'list' | 'types'} initialView
- * @param {boolean} closeOnAdd — tutup layar setelah akun berhasil dibuat (dipakai dari Wallet)
+ * @param {boolean} closeOnAdd — closes screen after account created (used from Wallet)
  */
 export default function AccountManagementFlow({
   onClose,
@@ -57,13 +57,13 @@ export default function AccountManagementFlow({
   const openAddFromList = () => setView('types')
 
   const openCustomForm = () => {
-    setFormDraft({ kind: 'asset', accountSource: 'debit', placeholder: 'Account name' })
+    setFormDraft({ kind: 'asset', accountSource: 'debit', placeholder: 'Account name', subtitle: '' })
     setFormName('')
     setView('form')
   }
 
   const selectType = (kind, accountSource, suggestedName) => {
-    setFormDraft({ kind, accountSource, placeholder: suggestedName })
+    setFormDraft({ kind, accountSource, placeholder: suggestedName, subtitle: '' })
     setFormName(suggestedName)
     setView('form')
   }
@@ -71,7 +71,7 @@ export default function AccountManagementFlow({
   const submitAccount = () => {
     const nm = formName.trim()
     if (!nm) {
-      onToast('Isi nama akun')
+      onToast('Enter account name')
       return
     }
     if (!formDraft) return
@@ -80,8 +80,9 @@ export default function AccountManagementFlow({
       name: nm,
       kind: formDraft.kind,
       accountSource: formDraft.accountSource,
+      subtitle: formDraft.subtitle || '',
     })
-    onToast('Akun ditambahkan')
+    onToast('Account added')
     setFormDraft(null)
     setFormName('')
     if (closeOnAdd) {
@@ -230,6 +231,15 @@ export default function AccountManagementFlow({
               onChange={(e) => setFormName(e.target.value)}
               placeholder={formDraft.placeholder}
               autoComplete="off"
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="acct-sub">Description</label>
+            <input
+              id="acct-sub"
+              value={formDraft.subtitle || ''}
+              onChange={(e) => setFormDraft((d) => ({ ...d, subtitle: e.target.value }))}
+              placeholder="e.g. Main account"
             />
           </div>
           <button type="button" className="more-account-fs__btn-create" onClick={submitAccount}>

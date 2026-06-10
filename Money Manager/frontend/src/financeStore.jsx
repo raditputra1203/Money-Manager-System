@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-import { DEFAULT_CATEGORIES, mergeAndNormalizeCategories, PROTECTED_CATEGORY_IDS } from './financeHelpers.js'
-import { isDemoMode, getFinanceState as apiGetFinanceState, addBook as apiAddBook, setDefaultBook as apiSetDefaultBook, deleteBook as apiDeleteBook, addAccount as apiAddAccount, updateAccount as apiUpdateAccount, addTransaction as apiAddTransaction, deleteTransaction as apiDeleteTransaction, transfer as apiTransfer, topup as apiTopup, saveBudgetPlan as apiSaveBudgetPlan, deleteBudgetPlan as apiDeleteBudgetPlan, updateSettings as apiUpdateSettings, addFeedback as apiAddFeedback, addRating as apiAddRating, addCategory as apiAddCategory, deleteCategory as apiDeleteCategory, resetData as apiResetData } from './api.js'
+import { DEFAULT_CATEGORIES, mergeAndNormalizeCategories } from './financeHelpers.js'
+import { isDemoMode, getFinanceState as apiGetFinanceState, addBook as apiAddBook, updateBook as apiUpdateBook, setDefaultBook as apiSetDefaultBook, deleteBook as apiDeleteBook, addAccount as apiAddAccount, updateAccount as apiUpdateAccount, addTransaction as apiAddTransaction, updateTransaction as apiUpdateTransaction, deleteTransaction as apiDeleteTransaction, transfer as apiTransfer, topup as apiTopup, updateSettings as apiUpdateSettings, addFeedback as apiAddFeedback, resetData as apiResetData } from './api.js'
 
 const STORAGE_PREFIX = 'mm_finance_'
 const DATA_VERSION = 2
@@ -17,11 +17,8 @@ function seedState() {
     transactions: [],
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
     budgets: zeroBudgetsFor(DEFAULT_CATEGORIES.map((c) => ({ ...c }))),
-    budgetPlans: [],
-    premium: false,
     settings: { notifications: true, compactNumbers: false },
     feedbacks: [],
-    ratings: [],
   }
 }
 
@@ -82,15 +79,12 @@ function loadState(email) {
       return {
         defaultBookId,
         books: p.books.map((b, i) => ({ ...hydrateBook(b, i), balance: 0 })),
-        accounts: normalizeAccountsList(p.accounts.map((a) => ({ ...a, balance: 0 }))),
+        accounts: normalizeAccountsList(p.accounts.map((a) => ({ ...a, balance: 0, subtitle: a.subtitle || '' }))),
         transactions: [],
         categories,
         budgets: { ...zeroBudgetsFor(categories) },
-        budgetPlans: [],
-        premium: !!p.premium,
         settings: { ...s.settings, ...(p.settings || {}) },
         feedbacks: Array.isArray(p.feedbacks) ? p.feedbacks : [],
-        ratings: Array.isArray(p.ratings) ? p.ratings : [],
       }
     }
 
@@ -104,11 +98,8 @@ function loadState(email) {
         typeof p.budgets === 'object' && p.budgets
           ? { ...zeroBudgetsFor(categories), ...p.budgets }
           : { ...zeroBudgetsFor(categories) },
-      budgetPlans: Array.isArray(p.budgetPlans) ? p.budgetPlans : [],
-      premium: !!p.premium,
       settings: { ...s.settings, ...(p.settings || {}) },
       feedbacks: Array.isArray(p.feedbacks) ? p.feedbacks : [],
-      ratings: Array.isArray(p.ratings) ? p.ratings : [],
     }
   } catch {
     return seedState()
@@ -117,7 +108,7 @@ function loadState(email) {
 
 function saveState(email, state) {
   if (!email) return
-  const { defaultBookId, books, accounts, transactions, categories, budgets, budgetPlans, premium, settings, feedbacks, ratings } =
+  const { defaultBookId, books, accounts, transactions, categories, budgets, settings, feedbacks } =
     state
   localStorage.setItem(
     STORAGE_PREFIX + email,
@@ -128,11 +119,8 @@ function saveState(email, state) {
       transactions,
       categories,
       budgets,
-      budgetPlans,
-      premium,
       settings,
       feedbacks,
-      ratings,
       dataVersion: DATA_VERSION,
     }),
   )
@@ -156,8 +144,20 @@ function reducer(state, action) {
       }
       return {
         ...state,
-        defaultBookId: id, // Set new book as default
+        defaultBookId: id,
         books: [...state.books, newBook],
+      }
+    }
+
+    case 'UPDATE_BOOK': {
+      const { id, name, subtitle } = action
+      return {
+        ...state,
+        books: state.books.map((b) =>
+          b.id === id
+            ? { ...b, name: (name || '').trim() || b.name, subtitle: subtitle !== undefined ? (subtitle || '').trim() : b.subtitle }
+            : b,
+        ),
       }
     }
 
@@ -186,7 +186,7 @@ function reducer(state, action) {
     }
 
     case 'ADD_TRANSACTION': {
-      const { bookId, accountId, entryType, amount, categoryId, note } = action
+      const { bookId, accountId, entryType, amount, categoryId, note, createdAt } = action
       const amt = Math.abs(Number(amount) || 0)
       if (amt <= 0) return state
       const tx = {
@@ -197,7 +197,7 @@ function reducer(state, action) {
         amount: amt,
         categoryId,
         note: (note || '').trim(),
-        createdAt: Date.now(),
+        createdAt: createdAt || Date.now(),
       }
       const accounts = state.accounts.map((a) => {
         if (a.id !== accountId) return a
@@ -210,6 +210,44 @@ function reducer(state, action) {
         return { ...b, balance: b.balance + delta }
       })
       return { ...state, transactions: [tx, ...state.transactions], accounts, books }
+    }
+
+    case 'UPDATE_TRANSACTION': {
+      const { id, bookId, accountId, entryType, amount, categoryId, note, createdAt } = action
+      const amt = Math.abs(Number(amount) || 0)
+      if (amt <= 0) return state
+      const oldTx = state.transactions.find((t) => t.id === id)
+      if (!oldTx) return state
+
+      let accounts = state.accounts.map((a) => {
+        if (a.id !== oldTx.accountId) return a
+        const rev = oldTx.type === 'income' ? -oldTx.amount : oldTx.amount
+        return { ...a, balance: a.balance + rev }
+      })
+      let books = state.books.map((b) => {
+        if (b.id !== oldTx.bookId) return b
+        const rev = oldTx.type === 'income' ? -oldTx.amount : oldTx.amount
+        return { ...b, balance: b.balance + rev }
+      })
+
+      accounts = accounts.map((a) => {
+        if (a.id !== accountId) return a
+        const delta = entryType === 'income' ? amt : -amt
+        return { ...a, balance: a.balance + delta }
+      })
+      books = books.map((b) => {
+        if (b.id !== bookId) return b
+        const delta = entryType === 'income' ? amt : -amt
+        return { ...b, balance: b.balance + delta }
+      })
+
+      const updatedTx = { ...oldTx, bookId, accountId, type: entryType, amount: amt, categoryId, note: (note || '').trim(), createdAt: createdAt || oldTx.createdAt }
+      return {
+        ...state,
+        transactions: state.transactions.map((t) => (t.id === id ? updatedTx : t)),
+        accounts,
+        books,
+      }
     }
 
     case 'DELETE_TRANSACTION': {
@@ -275,7 +313,6 @@ function reducer(state, action) {
       const categoryId = action.categoryId || 'i3'
       const note = (action.note || 'Top up').trim()
 
-      // Catat sebagai income di buku
       const tx = {
         id: uid(),
         kind: 'topup',
@@ -283,7 +320,6 @@ function reducer(state, action) {
         amount: amt,
         createdAt: Date.now(),
       }
-      // Juga catat income entry di ledger
       const ledgerTx = {
         id: uid(),
         bookId,
@@ -331,42 +367,6 @@ function reducer(state, action) {
         budgets: { ...state.budgets, [action.categoryId]: Math.max(0, Number(action.limit) || 0) },
       }
 
-    case 'SAVE_BUDGET_PLAN': {
-      const categoryId = action.categoryId
-      const amount = Math.max(0, Number(action.amount) || 0)
-      const name = (action.name || '').trim()
-      if (!categoryId || !name || amount <= 0) return state
-      const id = uid()
-      const prevPlans = state.budgetPlans || []
-      const others = prevPlans.filter((p) => p.categoryId !== categoryId)
-      const plan = {
-        id,
-        categoryId,
-        name,
-        icon: action.icon || '📊',
-        amount,
-        period: 'monthly',
-        startDate: (action.startDate || new Date().toISOString().slice(0, 10)).slice(0, 10),
-        note: String(action.note || '').slice(0, 30),
-      }
-      return {
-        ...state,
-        budgetPlans: [...others, plan],
-        budgets: { ...state.budgets, [categoryId]: amount },
-      }
-    }
-
-    case 'DELETE_BUDGET_PLAN': {
-      const prevPlans = state.budgetPlans || []
-      const plan = prevPlans.find((p) => p.id === action.id)
-      if (!plan) return state
-      return {
-        ...state,
-        budgetPlans: prevPlans.filter((p) => p.id !== action.id),
-        budgets: { ...state.budgets, [plan.categoryId]: 0 },
-      }
-    }
-
     case 'ADD_ACCOUNT': {
       const name = (action.name || '').trim()
       if (!name) return state
@@ -387,6 +387,7 @@ function reducer(state, action) {
             isUsed: true,
             isDefault: false,
             accountSource,
+            subtitle: action.subtitle || '',
             ...(action.goalAmount != null ? { goalAmount: action.goalAmount } : {}),
           },
         ],
@@ -401,46 +402,11 @@ function reducer(state, action) {
       }
     }
 
-    case 'ADD_CATEGORY': {
-      const name = (action.name || '').trim()
-      if (!name) return state
-      const id = uid()
-      const kind = action.kind === 'income' ? 'income' : 'expense'
-      return {
-        ...state,
-        categories: [...state.categories, { id, name, icon: action.icon || '📁', kind }],
-        budgets: { ...state.budgets, [id]: 0 },
-      }
-    }
-
-    case 'DELETE_CATEGORY': {
-      const id = action.id
-      if (PROTECTED_CATEGORY_IDS.has(id)) return state
-      const victim = state.categories.find((c) => c.id === id)
-      const vk = victim?.kind === 'income' ? 'income' : 'expense'
-      const fallback =
-        state.categories.find((c) => c.id !== id && (c.kind === 'income' ? 'income' : 'expense') === vk)?.id ||
-        (vk === 'income' ? 'i1' : 'c1')
-      return {
-        ...state,
-        categories: state.categories.filter((c) => c.id !== id),
-        transactions: state.transactions.map((t) => (t.categoryId === id ? { ...t, categoryId: fallback } : t)),
-        budgetPlans: (state.budgetPlans || []).filter((p) => p.categoryId !== id),
-        budgets: { ...state.budgets, [id]: 0 },
-      }
-    }
-
-    case 'SET_PREMIUM':
-      return { ...state, premium: !!action.value }
-
     case 'SET_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.patch } }
 
     case 'ADD_FEEDBACK':
       return { ...state, feedbacks: [...(state.feedbacks || []), { id: uid(), text: action.text, at: Date.now() }] }
-
-    case 'ADD_RATING':
-      return { ...state, ratings: [...(state.ratings || []), { stars: action.stars, at: Date.now() }] }
 
     case 'RESET_DATA':
       return { ...seedState(), categories: state.categories }
@@ -455,8 +421,11 @@ const FinanceCtx = createContext(null)
 export function FinanceProvider({ userEmail, children }) {
   const [state, dispatch] = useReducer(reducer, userEmail, loadState)
   const loadedRef = useRef(false)
+  const defaultBookIdRef = useRef(state.defaultBookId)
+  useEffect(() => {
+    defaultBookIdRef.current = state.defaultBookId
+  }, [state.defaultBookId])
 
-  // Initial load from server (only once, only if not demo mode)
   useEffect(() => {
     if (!userEmail || isDemoMode() || loadedRef.current) return
     loadedRef.current = true
@@ -470,7 +439,6 @@ export function FinanceProvider({ userEmail, children }) {
     })()
   }, [userEmail])
 
-  // Keep localStorage in sync
   useEffect(() => {
     saveState(userEmail, state)
   }, [userEmail, state])
@@ -481,7 +449,6 @@ export function FinanceProvider({ userEmail, children }) {
     return async (action) => {
       const type = action.type
 
-      // Server-first actions (call API BEFORE dispatching locally)
       if (type === 'RESET_DATA') {
         try {
           await apiResetData()
@@ -492,25 +459,25 @@ export function FinanceProvider({ userEmail, children }) {
         return
       }
 
-      // Local-only actions
-      if (['UPDATE_BUDGET', 'SET_PREMIUM'].includes(type)) {
+      if (['UPDATE_BUDGET'].includes(type)) {
         dispatch(action)
         return
       }
 
-      // Generate client-side IDs BEFORE dispatch so API gets the same ID
-      const clientId = (type === 'ADD_BOOK' || type === 'ADD_ACCOUNT' || type === 'ADD_TRANSACTION' || type === 'SAVE_BUDGET_PLAN' || type === 'TRANSFER' || type === 'TOP_UP') ? uid() : null
+      const clientId = (type === 'ADD_BOOK' || type === 'ADD_ACCOUNT' || type === 'ADD_TRANSACTION' || type === 'TRANSFER' || type === 'TOP_UP') ? uid() : null
       if (clientId && (type === 'ADD_BOOK' || type === 'ADD_ACCOUNT' || type === 'ADD_TRANSACTION')) {
         action.id = clientId
       }
+      if (clientId && type === 'TOP_UP') {
+        action.clientId = clientId
+      }
 
-      // Dispatch locally FIRST (optimistic UI)
       dispatch(action)
 
-      // Call API in background
       try {
         const apiMap = {
           ADD_BOOK: () => apiAddBook(action.name, clientId),
+          UPDATE_BOOK: () => apiUpdateBook(action.id, { name: action.name, subtitle: action.subtitle }),
           SET_DEFAULT_BOOK: () => apiSetDefaultBook(action.bookId),
           DELETE_BOOK: () => apiDeleteBook(action.bookId),
           ADD_TRANSACTION: () => apiAddTransaction({
@@ -520,14 +487,24 @@ export function FinanceProvider({ userEmail, children }) {
             amount: action.amount,
             categoryId: action.categoryId,
             note: action.note,
+            createdAt: action.createdAt,
             clientId,
+          }),
+          UPDATE_TRANSACTION: () => apiUpdateTransaction(action.id, {
+            bookId: action.bookId,
+            accountId: action.accountId,
+            entryType: action.entryType,
+            amount: action.amount,
+            categoryId: action.categoryId,
+            note: action.note,
+            createdAt: action.createdAt,
           }),
           DELETE_TRANSACTION: () => apiDeleteTransaction(action.id),
           TRANSFER: () => apiTransfer({ fromId: action.fromId, toId: action.toId, amount: action.amount, clientId }),
           TOP_UP: () => Promise.all([
             apiTopup({ accountId: action.accountId, amount: action.amount, clientId }),
             apiAddTransaction({
-              bookId: action.bookId || action.id,
+              bookId: action.bookId || defaultBookIdRef.current,
               accountId: action.accountId,
               entryType: 'income',
               amount: action.amount,
@@ -543,23 +520,16 @@ export function FinanceProvider({ userEmail, children }) {
             categoryId: action.categoryId,
             note: action.note,
           }),
-          ADD_ACCOUNT: () => apiAddAccount({ name: action.name, kind: action.kind, accountSource: action.accountSource, clientId }),
+          ADD_ACCOUNT: () => apiAddAccount({ name: action.name, kind: action.kind, accountSource: action.accountSource, subtitle: action.subtitle, clientId }),
           UPDATE_ACCOUNT: () => apiUpdateAccount(action.id, action.patch),
-          SAVE_BUDGET_PLAN: () => apiSaveBudgetPlan(action),
-          DELETE_BUDGET_PLAN: () => apiDeleteBudgetPlan(action.id),
           SET_SETTINGS: () => apiUpdateSettings(action.patch),
           ADD_FEEDBACK: () => apiAddFeedback({ text: action.text }),
-          ADD_RATING: () => apiAddRating({ stars: action.stars }),
-          ADD_CATEGORY: () => apiAddCategory({ name: action.name, icon: action.icon, kind: action.kind }),
-          DELETE_CATEGORY: () => apiDeleteCategory(action.id),
         }
 
         if (apiMap[type]) {
           await apiMap[type]()
         }
       } catch (err) {
-        // API call failed — but we keep optimistic state.
-        // On next page refresh, state will sync from localStorage+server anyway.
         console.error('[apiSync]', err)
       }
     }
