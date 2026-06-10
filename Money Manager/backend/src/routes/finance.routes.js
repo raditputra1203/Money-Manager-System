@@ -24,10 +24,20 @@ router.post(
   }),
 )
 
+// IMPORTANT: /books/default MUST be defined BEFORE /books/:id
+// otherwise Express matches "default" as the :id param
 router.patch(
   '/books/default',
   asyncHandler(async (req, res) => {
     await finance.setDefaultBook(req.user.id, req.body.bookId)
+    res.json({ ok: true })
+  }),
+)
+
+router.patch(
+  '/books/:id',
+  asyncHandler(async (req, res) => {
+    await finance.updateBook(req.user.id, req.params.id, req.body)
     res.json({ ok: true })
   }),
 )
@@ -58,8 +68,25 @@ router.post(
       amount: req.body.amount,
       categoryId: req.body.categoryId,
       note: req.body.note,
+      createdAt: req.body.createdAt,
     })
     res.status(201).json(tx)
+  }),
+)
+
+router.patch(
+  '/transactions/:id',
+  asyncHandler(async (req, res) => {
+    const tx = await finance.updateTransaction(req.user.id, req.params.id, {
+      bookId: req.body.bookId,
+      accountId: req.body.accountId,
+      entryType: req.body.entryType || req.body.type,
+      amount: req.body.amount,
+      categoryId: req.body.categoryId,
+      note: req.body.note,
+      createdAt: req.body.createdAt,
+    })
+    res.json(tx)
   }),
 )
 
@@ -104,50 +131,10 @@ router.delete(
 )
 
 router.post(
-  '/budget-plans',
-  asyncHandler(async (req, res) => {
-    const plan = await finance.saveBudgetPlan(req.user.id, req.body)
-    res.status(201).json(plan)
-  }),
-)
-
-router.delete(
-  '/budget-plans/:id',
-  asyncHandler(async (req, res) => {
-    await finance.deleteBudgetPlan(req.user.id, req.params.id)
-    res.json({ ok: true })
-  }),
-)
-
-router.post(
   '/feedbacks',
   asyncHandler(async (req, res) => {
     const fb = await finance.addFeedback(req.user.id, req.body)
     res.status(201).json(fb)
-  }),
-)
-
-router.post(
-  '/ratings',
-  asyncHandler(async (req, res) => {
-    const rt = await finance.addRating(req.user.id, req.body)
-    res.status(201).json(rt)
-  }),
-)
-
-router.post(
-  '/categories',
-  asyncHandler(async (req, res) => {
-    const cat = await finance.addCategory(req.user.id, req.body)
-    res.status(201).json(cat)
-  }),
-)
-
-router.delete(
-  '/categories/:id',
-  asyncHandler(async (req, res) => {
-    await finance.deleteCategory(req.user.id, req.params.id)
-    res.json({ ok: true })
   }),
 )
 

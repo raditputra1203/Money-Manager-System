@@ -41,7 +41,7 @@ export function mergeAndNormalizeCategories(persisted) {
       } else {
         push({
           id: c.id,
-          name: c.name || 'Kategori',
+          name: c.name || 'Category',
           icon: c.icon || '📁',
           kind: c.kind === 'income' ? 'income' : 'expense',
         })

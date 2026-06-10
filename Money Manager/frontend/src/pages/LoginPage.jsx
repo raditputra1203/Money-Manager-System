@@ -145,18 +145,18 @@ export default function LoginPage({ onAuthenticated }) {
     try {
       const key = String(email).toLowerCase().trim()
       if (!username?.trim() || !key || !password) {
-        throw new Error('Semua field wajib diisi.')
+        throw new Error('All fields are required.')
       }
       if (password.length < 6) {
-        throw new Error('Password minimal 6 karakter.')
+        throw new Error('Password must be at least 6 characters.')
       }
       if (password !== confirmPassword) {
-        throw new Error('Konfirmasi password tidak cocok.')
+        throw new Error('Password confirmation does not match.')
       }
 
       if (!isDemoMode()) {
         await apiRegister(key, password, username.trim())
-        setMessage('Akun berhasil dibuat. Silakan masuk.')
+        setMessage('Account created. Please sign in.')
         setTab('login')
         setPassword('')
         setConfirmPassword('')
@@ -167,11 +167,11 @@ export default function LoginPage({ onAuthenticated }) {
       await delay()
       const users = getUsers()
       if (users[key]) {
-        throw new Error('Email sudah terdaftar.')
+        throw new Error('Email already registered.')
       }
       users[key] = { password, name: username.trim() }
       saveUsers(users)
-      setMessage('Akun berhasil dibuat. Silakan masuk.')
+      setMessage('Account created. Please sign in.')
       setTab('login')
       setPassword('')
       setConfirmPassword('')
@@ -307,7 +307,7 @@ export default function LoginPage({ onAuthenticated }) {
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                   />
-                  Remeber me
+                  Remember me
                 </label>
                 <button type="button" className="link-blue" onClick={openForgot}>
                   Forgot Password?
@@ -429,7 +429,7 @@ export default function LoginPage({ onAuthenticated }) {
           <form className="modal" role="dialog" aria-labelledby="forgot-title" aria-modal="true" onSubmit={handleForgotSubmit}>
             <div className="modal__head">
               <h2 id="forgot-title">Reset password</h2>
-              <button type="button" className="modal__close" aria-label="Tutup" onClick={() => setForgotOpen(false)}>
+              <button type="button" className="modal__close" aria-label="Close" onClick={() => setForgotOpen(false)}>
                 <IconClose size={22} />
               </button>
             </div>
@@ -448,10 +448,10 @@ export default function LoginPage({ onAuthenticated }) {
             </div>
             <div className="modal-actions">
               <button type="button" className="btn-ghost" onClick={() => setForgotOpen(false)}>
-                Batal
+                Cancel
               </button>
               <button type="submit" className="btn-primary" style={{ width: 'auto' }} disabled={loading}>
-                Kirim
+                Send
               </button>
             </div>
           </form>

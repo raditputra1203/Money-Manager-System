@@ -1,4 +1,4 @@
-import { getAccessToken } from './session.js'
+import { getAccessToken, getRefreshToken, saveToken } from './session.js'
 
 /**
  * Returns the API base URL.
@@ -41,10 +41,59 @@ function headers(extra = {}) {
   return h
 }
 
+let refreshing = null
+
 /**
- * Parse response, throw on non-ok status.
+ * Try to refresh the access token using the stored refresh token.
+ * Returns the new access token, or null if refresh fails.
+ */
+async function tryRefreshToken() {
+  if (refreshing) return refreshing
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return null
+  refreshing = (async () => {
+    try {
+      const base = getApiUrl()
+      const res = await fetch(`${base}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      saveToken(data.access_token, data.refresh_token, data.expires_at)
+      return data.access_token
+    } catch {
+      return null
+    } finally {
+      refreshing = null
+    }
+  })()
+  return refreshing
+}
+
+/**
+ * Parse response, throw on non-ok status. On 401, attempt token refresh once.
  */
 async function handleResponse(res) {
+  if (res.status === 401) {
+    const newToken = await tryRefreshToken()
+    if (newToken) {
+      // Retry the original request with the new token
+      const base = getApiUrl()
+      const url = `${base}${res.url.replace(base || '', '')}`
+      const opts = {
+        method: res.method,
+        headers: headers(),
+      }
+      if (res.method !== 'GET' && res.method !== 'HEAD') {
+        const body = await res.clone().text()
+        if (body) opts.body = body
+      }
+      const retryRes = await fetch(url, opts)
+      if (retryRes.ok) return retryRes.json()
+    }
+  }
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     try {
@@ -109,6 +158,10 @@ export async function addBook(name, clientId) {
   return request('POST', '/api/finance/books', { name, clientId })
 }
 
+export async function updateBook(id, data) {
+  return request('PATCH', `/api/finance/books/${id}`, data)
+}
+
 export async function setDefaultBook(bookId) {
   return request('PATCH', '/api/finance/books/default', { bookId })
 }
@@ -133,6 +186,10 @@ export async function addTransaction(data) {
   return request('POST', '/api/finance/transactions', data)
 }
 
+export async function updateTransaction(id, data) {
+  return request('PATCH', `/api/finance/transactions/${id}`, data)
+}
+
 export async function deleteTransaction(id) {
   return request('DELETE', `/api/finance/transactions/${id}`)
 }
@@ -147,34 +204,10 @@ export async function topup(data) {
   return request('POST', '/api/finance/topups', data)
 }
 
-// ─── Budget Plans ────────────────────────────────────
-
-export async function saveBudgetPlan(data) {
-  return request('POST', '/api/finance/budget-plans', data)
-}
-
-export async function deleteBudgetPlan(id) {
-  return request('DELETE', `/api/finance/budget-plans/${id}`)
-}
-
-// ─── Categories ──────────────────────────────────────
-
-export async function addCategory(data) {
-  return request('POST', '/api/finance/categories', data)
-}
-
-export async function deleteCategory(id) {
-  return request('DELETE', `/api/finance/categories/${id}`)
-}
-
-// ─── Feedbacks & Ratings ─────────────────────────────
+// ─── Feedbacks ────────────────────────────────────────
 
 export async function addFeedback(data) {
   return request('POST', '/api/finance/feedbacks', data)
-}
-
-export async function addRating(data) {
-  return request('POST', '/api/finance/ratings', data)
 }
 
 // ─── Reset ────────────────────────────────────────────

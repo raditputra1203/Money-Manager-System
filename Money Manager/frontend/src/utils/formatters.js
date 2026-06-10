@@ -11,6 +11,7 @@ export function fmtRp(n) {
 
 export function fmtRpBooksDisplay(n) {
   const abs = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.abs(n))
+  if (n < 0) return `-Rp ${abs}`
   return `Rp ${abs}`
 }
 
